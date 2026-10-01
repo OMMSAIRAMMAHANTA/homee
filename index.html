@@ -1,746 +1,485 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Advanced Glass Air Hockey</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+<title>NEO-HOME 3D Floor Plan - 120FPS Responsive</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+:root {
+    --bg: #06090f;
+    --fg: #cdf6ff;
+    --ac: #00e5ff;
+    --ac2: #ff2bd6;
+    --panel: rgba(8, 16, 28, 0.72);
+}
+body, html {
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    touch-action: none; /* Prevent browser zooming/scrolling */
+}
+body {
+    background: radial-gradient(circle at 50% 45%, #0c2233, var(--bg) 72%);
+}
+.grid-bg {
+    position: absolute;
+    inset: 0;
+    background-image: linear-gradient(var(--ac) 1px, transparent 1px), linear-gradient(90deg, var(--ac) 1px, transparent 1px);
+    background-size: 44px 44px;
+    opacity: 0.06;
+}
+#view {
+    position: absolute;
+    inset: 0;
+    perspective: 1900px;
+    cursor: grab;
+}
+#view:active {
+    cursor: grabbing;
+}
+/* Hardware acceleration and will-change for 120FPS smoothness */
+#scene, #house, #house * {
+    transform-style: preserve-3d;
+    box-sizing: border-box;
+}
+#scene {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    will-change: transform;
+}
+#house {
+    position: absolute;
+    left: -217px;
+    top: -217px;
+}
+#house * {
+    position: absolute;
+}
+.pad {
+    border: 1px solid rgba(0, 229, 255, 0.35);
+    transform: translateZ(7px);
+}
 
-        body {
-            /* Mobile browsers par dynamic URL bars ke sath perfect fit ke liye dvh ka use */
-            height: 100dvh; 
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            background: linear-gradient(135deg, #13151a 0%, #1e222d 50%, #111827 100%);
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            overflow: hidden;
-            perspective: 1200px;
-            /* Browser gestures, pull-to-refresh, aur text highlighting ko rokein */
-            overscroll-behavior: none; 
-            touch-action: none; 
-            user-select: none;
-            -webkit-user-select: none;
-            -webkit-touch-callout: none;
-        }
+.lbl {
+    white-space: nowrap;
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    transform-origin: 0 0;
+    pointer-events: none;
+    padding: 3px 10px;
+    border: 1px solid currentColor;
+    background: var(--panel);
+    border-radius: 4px;
+    text-shadow: 0 0 8px currentColor;
+    box-shadow: 0 0 10px rgba(0, 229, 255, 0.25);
+    will-change: transform;
+    backdrop-filter: blur(4px);
+}
+@keyframes spin { from { transform: translateZ(38px) rotateZ(0); } to { transform: translateZ(38px) rotateZ(360deg); } }
+@keyframes spin2 { from { transform: translateZ(56px) rotateX(72deg) rotateZ(0); } to { transform: translateZ(56px) rotateX(72deg) rotateZ(-360deg); } }
+@keyframes bob { 0%, 100% { transform: translateZ(40px); } 50% { transform: translateZ(54px); } }
+@keyframes scan { from { transform: translateZ(9px) translateY(0); } to { transform: translateZ(9px) translateY(418px); } }
+@keyframes pulse { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
 
-        /* Glass Panel Styles - Ab puri tarah se responsive hai */
-        .panel {
-            width: 100%;
-            height: 100%;
-            max-width: 500px;
-            max-height: 900px;
-            border-radius: 48px;
-            position: relative;
-            background: linear-gradient(135deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.05) 100%);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            border-top: 2px solid rgba(255, 255, 255, 0.4);
-            border-left: 2px solid rgba(255, 255, 255, 0.4);
-            box-shadow: 
-                0 30px 60px -15px rgba(0, 0, 0, 0.5),
-                inset 2px 2px 15px rgba(255, 255, 255, 0.1);
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            overflow: hidden; 
-        }
-
-        /* Chhote mobile screens par full bleed (Bina borders ke) */
-        @media (max-width: 600px) {
-            .panel {
-                border-radius: 0;
-                max-width: 100%;
-                max-height: 100%;
-                border: none;
-            }
-        }
-
-        #game-container {
-            width: 100%;
-            height: 100%; 
-            position: relative;
-            flex-grow: 1;
-        }
-
-        canvas {
-            display: block;
-            outline: none;
-            width: 100%;
-            height: 100%;
-            touch-action: none;
-        }
-
-        /* UI Overlays (Menus) */
-        .game-ui {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            background: rgba(10, 15, 25, 0.6);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-            z-index: 20;
-            transition: opacity 0.4s ease;
-            padding: 0 40px;
-        }
-
-        .game-ui.hidden {
-            opacity: 0;
-            pointer-events: none;
-        }
-
-        .game-title {
-            font-size: 42px;
-            font-weight: 800;
-            color: #fff;
-            text-shadow: 0px 0px 20px rgba(0,212,255,0.6);
-            letter-spacing: -1px;
-            margin-bottom: 8px;
-            text-align: center;
-        }
-
-        .game-subtitle {
-            font-size: 15px;
-            color: #cbd5e1;
-            font-weight: 500;
-            margin-bottom: 40px;
-            text-align: center;
-            line-height: 1.6;
-        }
-
-        .score-display {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            pointer-events: none;
-            z-index: 5;
-            opacity: 0;
-            transition: opacity 0.3s ease;
-        }
-
-        .score-display.visible {
-            opacity: 1;
-        }
-        
-        .score-text {
-            position: absolute;
-            width: 100%;
-            text-align: center;
-            font-size: 100px;
-            font-weight: 900;
-            opacity: 0.15;
-        }
-
-        /* Player 2 ka score ulta hona chahiye (Top par) */
-        .p2-score { 
-            color: #ff0055; 
-            top: 15%;
-            transform: rotate(180deg);
-            text-shadow: 0 0 30px rgba(255,0,85,0.8);
-        }
-        
-        /* Player 1 ka score seedha (Bottom par) */
-        .p1-score { 
-            color: #00d4ff; 
-            bottom: 15%;
-            text-shadow: 0 0 30px rgba(0,212,255,0.8);
-        }
-
-        /* Start/Resume Button ki styling */
-        .glass-btn {
-            width: 100%;
-            max-width: 300px;
-            height: 64px;
-            border-radius: 32px;
-            background: linear-gradient(135deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.05) 100%);
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            border-top: 1px solid rgba(255, 255, 255, 0.6);
-            border-left: 1px solid rgba(255, 255, 255, 0.6);
-            box-shadow: 
-                0 10px 25px -5px rgba(0, 0, 0, 0.3),
-                inset 2px 2px 10px rgba(255, 255, 255, 0.1);
-            color: #fff;
-            font-size: 20px;
-            font-weight: 700;
-            letter-spacing: 1px;
-            cursor: pointer;
-            transition: all 0.2s ease;
-        }
-
-        .glass-btn:active {
-            transform: scale(0.95);
-            background: rgba(255,255,255,0.1);
-        }
-
-        /* Beech mein Pause Button ki styling */
-        .pause-btn {
-            position: absolute;
-            top: 50%;
-            right: 15px;
-            transform: translateY(-50%);
-            width: 44px;
-            height: 44px;
-            border-radius: 50%;
-            background: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            color: white;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            font-size: 18px;
-            cursor: pointer;
-            z-index: 15;
-            transition: all 0.2s;
-            opacity: 0;
-            pointer-events: none;
-        }
-
-        .pause-btn.visible {
-            opacity: 1;
-            pointer-events: auto;
-        }
-
-        .pause-btn:active {
-            transform: translateY(-50%) scale(0.9);
-        }
-
-    </style>
+/* Tailwind Button Active State Override */
+.btn-on {
+    background-color: var(--ac);
+    color: #021018;
+    box-shadow: 0 0 16px var(--ac);
+    border-color: transparent;
+}
+</style>
 </head>
 <body>
 
-    <div class="panel">
-        <div id="game-container">
-            <!-- Scores dikhane ke liye -->
-            <div id="score-container" class="score-display">
-                <div id="p2-score-text" class="score-text p2-score">0</div>
-                <div id="p1-score-text" class="score-text p1-score">0</div>
-            </div>
-            
-            <!-- In-game pause button -->
-            <button class="pause-btn" id="pause-btn">⏸</button>
-            
-            <!-- Main Game Canvas -->
-            <canvas id="gameCanvas"></canvas>
-            
-            <!-- Menus aur Instructions -->
-            <div id="game-ui" class="game-ui">
-                <h2 class="game-title">Glass<br>Hockey</h2>
-                <p class="game-subtitle" id="game-sub">
-                    <b style="color:#ff0055">Player 2</b> (Upar Wala Hissa)<br>
-                    <b style="color:#00d4ff">Player 1</b> (Neeche Wala Hissa)<br><br>
-                    Device ko seedha rakhein. Pehle 7 goals wala jitega!
-                </p>
-                <button class="glass-btn" id="start-btn">Khel Shuru Karein</button>
-            </div>
-        </div>
+<div class="grid-bg"></div>
+
+<div id="view">
+    <div id="scene">
+        <div id="house"></div>
     </div>
+</div>
 
-    <script>
-        // ==========================================
-        // RESPONSIVE GAME SETUP & PHYSICS ENGINE
-        // ==========================================
-        
-        const canvas = document.getElementById('gameCanvas');
-        const ctx = canvas.getContext('2d', { alpha: false }); 
-        const gameContainer = document.getElementById('game-container');
-        
-        let gameActive = false;
-        let animationId;
-        let goalWidth = 140;
-        const friction = 0.985;
-        let timeCount = 0;
+<!-- HUD (Top Left) -->
+<div class="absolute left-2 top-2 sm:left-4 sm:top-4 p-3 sm:p-4 bg-black/60 border border-cyan-400/50 rounded-xl backdrop-blur-md shadow-[0_0_15px_rgba(0,229,255,0.3)] z-10 pointer-events-none max-w-[65vw]">
+    <h1 class="m-0 text-sm sm:text-lg font-bold tracking-[0.3em] text-cyan-400 drop-shadow-[0_0_8px_#00e5ff]">NEO·HOME</h1>
+    <p class="m-0 mt-1 sm:mt-2 text-[9px] sm:text-[11px] text-cyan-100/75 tracking-wider leading-relaxed">
+        3 ROOMS · 2 BATH · KITCHEN · LOBBY<br class="hidden sm:block">
+        DRAG = ROTATE · WHEEL/PINCH = ZOOM
+    </p>
+</div>
 
-        // Pointer IDs ko globally define kiya hai taki har jagah access ho sake
-        let p1PointerId = null;
-        let p2PointerId = null;
-        
-        // Dynamic Physics Objects (Puck mein ab color property hai)
-        const puck = { x: 0, y: 0, vx: 0, vy: 0, r: 18, baseSpeed: 8, trail: [], color: '#ffffff' };
-        
-        const p1 = { 
-            x: 0, y: 0, targetX: 0, targetY: 0, 
-            vx: 0, vy: 0, r: 32, score: 0, 
-            color: '#00d4ff', bounds: { top: 0, bottom: 0 }
-        };
-        
-        const p2 = { 
-            x: 0, y: 0, targetX: 0, targetY: 0, 
-            vx: 0, vy: 0, r: 32, score: 0, 
-            color: '#ff0055', bounds: { top: 0, bottom: 0 }
-        };
+<!-- Legend (Top Right - Hidden on very small screens) -->
+<div class="absolute right-4 top-4 hidden md:grid gap-2 p-3 bg-black/60 border border-cyan-400/50 rounded-xl backdrop-blur-md shadow-[0_0_15px_rgba(0,229,255,0.3)] text-[11px] tracking-wider text-cyan-100 z-10 pointer-events-none">
+    <span class="flex items-center"><i class="inline-block w-[18px] h-[6px] bg-[#4fd8ff] mr-2 shadow-[0_0_8px_#4fd8ff]"></i>Window</span>
+    <span class="flex items-center"><i class="inline-block w-[10px] h-[10px] border border-pink-500 rounded-tr-full mr-2"></i>Door & Swing</span>
+    <span class="flex items-center"><i class="inline-block w-[10px] h-[10px] border border-white rounded-full mr-2"></i>Exhaust Fan</span>
+</div>
 
-        let sparks = [];
+<!-- Interaction Toolbar (Bottom Center - Responsive wrapping) -->
+<div class="absolute bottom-4 left-1/2 -translate-x-1/2 flex flex-wrap justify-center w-[95vw] sm:w-max max-w-2xl gap-2 p-2 bg-black/60 border border-cyan-400/40 rounded-xl backdrop-blur-md shadow-[0_0_20px_rgba(0,229,255,0.15)] z-10">
+    <button id="bWall" class="px-3 py-2 text-[10px] sm:text-xs font-semibold tracking-[0.12em] uppercase text-cyan-100 bg-transparent border border-cyan-500/50 rounded-lg transition-all hover:bg-cyan-500/20 active:scale-95">Walls: Full</button>
+    <button id="bLbl" class="btn-on px-3 py-2 text-[10px] sm:text-xs font-semibold tracking-[0.12em] uppercase text-cyan-100 bg-transparent border border-cyan-500/50 rounded-lg transition-all hover:bg-cyan-500/20 active:scale-95">Labels</button>
+    <button id="bAuto" class="btn-on px-3 py-2 text-[10px] sm:text-xs font-semibold tracking-[0.12em] uppercase text-cyan-100 bg-transparent border border-cyan-500/50 rounded-lg transition-all hover:bg-cyan-500/20 active:scale-95">Auto-Spin</button>
+    <button id="bTop" class="px-3 py-2 text-[10px] sm:text-xs font-semibold tracking-[0.12em] uppercase text-cyan-100 bg-transparent border border-cyan-500/50 rounded-lg transition-all hover:bg-cyan-500/20 active:scale-95">Top View</button>
+    <button id="bIso" class="px-3 py-2 text-[10px] sm:text-xs font-semibold tracking-[0.12em] uppercase text-cyan-100 bg-transparent border border-cyan-500/50 rounded-lg transition-all hover:bg-cyan-500/20 active:scale-95">Iso View</button>
+    <button id="bDec" class="btn-on px-3 py-2 text-[10px] sm:text-xs font-semibold tracking-[0.12em] uppercase text-cyan-100 bg-transparent border border-cyan-500/50 rounded-lg transition-all hover:bg-cyan-500/20 active:scale-95">Decor</button>
+</div>
 
-        // UI Elements
-        const uiOverlay = document.getElementById('game-ui');
-        const scoreContainer = document.getElementById('score-container');
-        const p1ScoreTxt = document.getElementById('p1-score-text');
-        const p2ScoreTxt = document.getElementById('p2-score-text');
-        const startBtn = document.getElementById('start-btn');
-        const gameSub = document.getElementById('game-sub');
-        const pauseBtn = document.getElementById('pause-btn');
+<script>
+const H = document.getElementById('house');
+const S = document.getElementById('scene');
+const V = document.getElementById('view');
 
-        // --- Responsive Resizer (Screen size ke hisab se game ko set karta hai) ---
-        function resize() {
-            canvas.width = gameContainer.clientWidth;
-            canvas.height = gameContainer.clientHeight;
-            
-            const midY = canvas.height / 2;
-            const midX = canvas.width / 2;
-            
-            goalWidth = Math.max(120, canvas.width * 0.4);
-            
-            p1.bounds = { top: midY, bottom: canvas.height };
-            p2.bounds = { top: 0, bottom: midY };
-            
-            if (!gameActive && p1.score === 0 && p2.score === 0) {
-                p1.x = midX; p1.y = canvas.height - 100;
-                p2.x = midX; p2.y = 100;
-                p1.targetX = p1.x; p1.targetY = p1.y;
-                p2.targetX = p2.x; p2.targetY = p2.y;
-                puck.x = midX; puck.y = midY;
-            }
-        }
+// Constants
+const AC = '#00e5ff';
+const AC2 = '#ff2bd6';
 
-        window.addEventListener('resize', resize);
-        resize(); // Game shuru hone se pehle initial sizing
+// State Variables
+let decor = true;
+let wm = 0; // Wall mode (0: Full, 1: Low, 2: Off)
+let showLbl = true;
+let auto = true;
+let labels = [];
 
-        // --- Particle System (Chingariyan banane ke liye) ---
-        function createSparks(x, y, color) {
-            for(let i=0; i<15; i++) {
-                sparks.push({
-                    x: x, y: y,
-                    vx: (Math.random() - 0.5) * 14, 
-                    vy: (Math.random() - 0.5) * 14,
-                    life: 1.0, 
-                    color: color,
-                    size: Math.random() * 3 + 1
-                });
-            }
-        }
+// High-Performance Smooth Animation Targets (Lerp variables)
+let rx = 56, targetRx = 56;
+let rz = -35, targetRz = -35;
+let zoom = 1, targetZoom = 1;
 
-        function updateSparks() {
-            for(let i = sparks.length - 1; i >= 0; i--) {
-                let s = sparks[i];
-                s.x += s.vx;
-                s.y += s.vy;
-                s.vx *= 0.94; // Hawa ka dabav (Air resistance)
-                s.vy *= 0.94;
-                s.life -= 0.04;
-                if(s.life <= 0) sparks.splice(i, 1);
-            }
-        }
+// Use Document Fragment to batch DOM insertions for ultra-fast creation
+let currentFragment = null;
 
-        // --- Game Logic ---
-        function resetPuck(scorer) {
-            const midX = canvas.width / 2;
+// Helper: 3D Box Generation
+function box(x, y, w, d, h, col, o = {}) {
+    const e = document.createElement('div');
+    e.style.left = x + 'px'; e.style.top = y + 'px';
+    e.style.width = w + 'px'; e.style.height = d + 'px';
+    if(o.z) e.style.transform = `translateZ(${o.z}px)`;
+    
+    const face = (st, br) => {
+        const f = document.createElement('div');
+        f.style.background = col;
+        f.style.filter = `brightness(${br})`;
+        Object.assign(f.style, st);
+        e.appendChild(f);
+    };
+    
+    face({left: 0, top: 0, width: w + 'px', height: d + 'px', transform: `translateZ(${h}px)`, boxShadow: o.glow ? `inset 0 0 0 1px ${o.glow}, 0 0 12px ${o.glow}` : 'none'}, 1.15);
+    face({left: 0, top: d + 'px', width: w + 'px', height: h + 'px', transformOrigin: 'top', transform: 'rotateX(90deg)'}, 0.85);
+    face({left: 0, top: 0, width: w + 'px', height: h + 'px', transformOrigin: 'top', transform: 'rotateX(90deg)'}, 0.6);
+    face({left: 0, top: 0, width: h + 'px', height: d + 'px', transformOrigin: 'left', transform: 'rotateY(-90deg)'}, 0.7);
+    face({left: w + 'px', top: 0, width: h + 'px', height: d + 'px', transformOrigin: 'left', transform: 'rotateY(-90deg)'}, 0.5);
+    
+    currentFragment.appendChild(e);
+    return e;
+}
 
-            // Puck ko centre mein wapas layein
-            puck.x = midX;
-            puck.y = canvas.height / 2;
-            puck.vx = 0;
-            puck.vy = scorer === 1 ? -puck.baseSpeed : puck.baseSpeed;
-            puck.trail = []; 
+// Helper: Flat Pad
+function pad(x, y, w, d, bg) {
+    const p = document.createElement('div');
+    p.className = 'pad';
+    p.style.left = x + 'px'; p.style.top = y + 'px';
+    p.style.width = w + 'px'; p.style.height = d + 'px';
+    p.style.background = bg;
+    currentFragment.appendChild(p);
+}
 
-            // Dono players (strikers) ko unki original jagah par reset karein jab goal ho
-            p1.x = midX; p1.y = canvas.height - 100;
-            p1.targetX = p1.x; p1.targetY = p1.y;
-            p1.vx = 0; p1.vy = 0;
+// Helper: 3D Floating Label
+function label(t, x, y, z, c) {
+    const l = document.createElement('div');
+    l.className = 'lbl';
+    l.textContent = t;
+    l.style.color = c;
+    l.style.left = x + 'px';
+    l.style.top = y + 'px';
+    l.dataset.z = z;
+    l.style.display = showLbl ? 'block' : 'none';
+    currentFragment.appendChild(l);
+    labels.push(l);
+}
 
-            p2.x = midX; p2.y = 100;
-            p2.targetX = p2.x; p2.targetY = p2.y;
-            p2.vx = 0; p2.vy = 0;
+// Helper: Arching Door swing
+function door(hx, hy, r, a0, sw) {
+    const a1 = a0 + sw, R = Math.PI / 180;
+    const p = a => [(r * Math.cos(a * R)).toFixed(1), (r * Math.sin(a * R)).toFixed(1)];
+    const [x0, y0] = p(a0), [x1, y1] = p(a1);
+    
+    const d = document.createElement('div');
+    d.style.cssText = `left:${hx}px;top:${hy}px;width:1px;height:1px;transform:translateZ(8px)`;
+    d.innerHTML = `<svg style="position:absolute;left:0;top:0;overflow:visible" width="1" height="1"><path d="M0 0 L${x0} ${y0} A${r} ${r} 0 0 ${sw > 0 ? 1 : 0} ${x1} ${y1} Z" fill="rgba(255,43,214,.12)" stroke="${AC2}" stroke-width="1.5" stroke-dasharray="4 3"/></svg>`;
+    currentFragment.appendChild(d);
+    
+    const l = box(hx, hy - 1.5, r, 3, 68, '#c98b4a', {glow: AC2});
+    l.style.transformOrigin = '0 50%';
+    l.style.transform = `rotateZ(${a1}deg)`;
+}
 
-            // Touch pointers ko clear kar de taki game screen teleportation bug na aaye (khiladi ko firse touch karna padega)
-            p1PointerId = null;
-            p2PointerId = null;
-        }
+// Helper: Generic div
+function div(css, cls) {
+    const d = document.createElement('div');
+    d.style.cssText = css;
+    if(cls) d.className = cls;
+    currentFragment.appendChild(d);
+    return d;
+}
 
-        function startGame() {
-            uiOverlay.classList.add('hidden');
-            scoreContainer.classList.add('visible');
-            pauseBtn.classList.add('visible');
-            
-            p1.score = 0; p2.score = 0;
-            p1ScoreTxt.innerText = 0; p2ScoreTxt.innerText = 0;
-            
-            sparks = [];
-            // Randomly kisi ek player ko puck serve karein
-            resetPuck(Math.random() > 0.5 ? 1 : 2); 
-            
-            gameActive = true;
-            cancelAnimationFrame(animationId);
-            loop();
-        }
+// Helper: Glowing floor pad
+function glowPad(x, y, w, d, c, z = 9, bg) {
+    div(`left:${x}px;top:${y}px;width:${w}px;height:${d}px;background:${bg || c};box-shadow:0 0 12px ${c};transform:translateZ(${z}px)`);
+}
 
-        function pauseGame() {
-            gameActive = false;
-            uiOverlay.classList.remove('hidden');
-            pauseBtn.classList.remove('visible');
-            document.querySelector('.game-title').innerText = "Ruka Hua (Paused)";
-            gameSub.innerText = "";
-            startBtn.innerText = "Khel Jari Rakhein (Resume)";
-            cancelAnimationFrame(animationId);
-        }
+// Helper: Complex Bed Structure
+function bed(x, y, blanket) {
+    box(x - 4, y - 4, 78, 6, 44, '#22313f', {glow: AC});
+    box(x, y, 70, 96, 10, '#141c26', {glow: AC});
+    box(x + 3, y + 4, 64, 88, 16, '#e4edf2');
+    box(x + 3, y + 46, 64, 46, 19, blanket);
+    box(x + 7, y + 8, 26, 14, 22, '#c7d7e2');
+    box(x + 37, y + 8, 26, 14, 22, '#c7d7e2');
+    box(x - 24, y, 14, 14, 16, '#141c26', {glow: '#ffd27a'});
+    box(x + 80, y, 14, 14, 16, '#141c26', {glow: '#ffd27a'});
+    glowPad(x - 10, y + 100, 90, 2, AC2, 9);
+}
 
-        function gameOver(winner) {
-            gameActive = false;
-            uiOverlay.classList.remove('hidden');
-            pauseBtn.classList.remove('visible');
-            document.querySelector('.game-title').innerText = "Game Khatam!";
-            gameSub.innerHTML = winner === 1 
-                ? "<span style='color:#00d4ff; font-size:24px; font-weight:bold;'>Player 1 Jeet Gaya!</span>" 
-                : "<span style='color:#ff0055; font-size:24px; font-weight:bold;'>Player 2 Jeet Gaya!</span>";
-            startBtn.innerText = "Fir se Kheliye (Rematch)";
-            cancelAnimationFrame(animationId);
-        }
+// Helper: Simple Plant
+function plant(x, y) {
+    box(x, y, 12, 12, 10, '#1a2430', {glow: AC});
+    box(x - 5, y - 5, 22, 22, 30, 'rgba(40,200,120,.85)', {z: 10});
+}
 
-        // --- Keyboard Integration (Desktop par khelne ke liye) ---
-        const keys = {};
-        window.addEventListener('keydown', e => keys[e.key] = true);
-        window.addEventListener('keyup', e => keys[e.key] = false);
+function decorate() {
+    glowPad(230, 190, 2, 239, AC, 9); // Hallway line
+    glowPad(20, 299, 210, 2, AC, 9);  // Kitchen line
+    
+    // Scanline area
+    div(`left:30px;top:204px;width:130px;height:96px;border:1px solid ${AC2};background:rgba(255,43,214,.08);box-shadow:inset 0 0 20px rgba(255,43,214,.3);transform:translateZ(9px)`);
+    // Scanning beam
+    div('left:6px;top:8px;width:423px;height:3px;background:#ff2bd6;box-shadow:0 0 14px #ff2bd6,0 0 30px #ff2bd6;animation:scan 5s ease-in-out infinite alternate');
+    
+    // Furniture
+    bed(46, 24, '#0a6b53');
+    bed(310, 24, '#0a6b53');
+    bed(338, 286, '#1f5f8c');
+    box(10, 130, 20, 46, 64, '#1a2430', {glow: AC});
+    box(404, 126, 20, 50, 64, '#1a2430', {glow: AC});
+    box(398, 388, 26, 36, 64, '#1a2430', {glow: AC});
+    
+    // Washrooms
+    box(186, 10, 22, 10, 26, '#e9f1f7'); box(188, 20, 18, 20, 14, '#e9f1f7'); box(222, 8, 24, 16, 16, '#e9f1f7', {glow: AC});
+    box(222, 80, 22, 10, 26, '#e9f1f7'); box(224, 90, 18, 20, 14, '#e9f1f7'); box(182, 78, 24, 16, 16, '#e9f1f7', {glow: AC});
+    box(182, 118, 34, 50, 66, 'rgba(79,216,255,.28)', {glow: '#4fd8ff'}); // Shower
+    
+    // Kitchen
+    box(8, 400, 138, 26, 24, '#0b0d12', {glow: AC});
+    box(8, 322, 26, 78, 24, '#0b0d12', {glow: AC});
+    box(70, 350, 50, 24, 22, '#0b0d12', {glow: AC2});
+    box(40, 404, 22, 18, 2, '#222', {glow: AC2, z: 24});
+    box(150, 394, 28, 32, 58, '#aab8c4', {glow: AC}); // Fridge
+    
+    // Lobby
+    box(8, 214, 5, 76, 48, '#02060a', {glow: AC, z: 18}); // TV
+    box(84, 214, 28, 76, 22, '#243447', {glow: AC});      // Sofa base
+    box(110, 214, 6, 76, 40, '#243447', {glow: AC});      // Sofa back
+    box(46, 236, 26, 34, 12, 'rgba(79,216,255,.35)', {glow: AC}); // Coffee table
+    
+    // Holo setup
+    box(200, 246, 22, 22, 10, '#141c26', {glow: AC2});
+    div(`left:180px;top:226px;width:62px;height:62px;border:2px dashed ${AC};border-radius:50%;box-shadow:0 0 14px ${AC};animation:spin 6s linear infinite`);
+    div(`left:186px;top:232px;width:50px;height:50px;border:2px solid ${AC2};border-radius:50%;box-shadow:0 0 12px ${AC2};animation:spin2 5s linear infinite`);
+    div(`left:206px;top:252px;width:10px;height:10px;border-radius:50%;background:#fff;box-shadow:0 0 16px 6px ${AC};animation:bob 3s ease-in-out infinite`);
+    
+    plant(14, 330); plant(268, 312); plant(272, 196); plant(416, 238);
+    
+    // Corner Pylons
+    [[-16, -16], [443, -16], [-16, 443], [443, 443]].forEach(p => {
+        box(p[0], p[1], 8, 8, 130, 'rgba(0,229,255,.3)', {glow: AC});
+        div(`left:${p[0]-2}px;top:${p[1]-2}px;width:12px;height:12px;border-radius:50%;background:${AC2};box-shadow:0 0 16px 4px ${AC2};transform:translateZ(134px);animation:pulse 2s infinite`);
+    });
+    
+    label('◈ Smart Home Online', 215, 215, 120, AC2);
+}
 
-        function applyKeyboardInput() {
-            const speed = 16; 
-            // Player 2 (Upar) WASD ka upyog karta hai
-            if (keys['w'] || keys['W']) updatePointerTarget(p2, p2.targetX, p2.targetY - speed);
-            if (keys['s'] || keys['S']) updatePointerTarget(p2, p2.targetX, p2.targetY + speed);
-            if (keys['a'] || keys['A']) updatePointerTarget(p2, p2.targetX - speed, p2.targetY);
-            if (keys['d'] || keys['D']) updatePointerTarget(p2, p2.targetX + speed, p2.targetY);
-            
-            // Player 1 (Neeche) Arrow keys ka upyog karta hai
-            if (keys['ArrowUp']) updatePointerTarget(p1, p1.targetX, p1.targetY - speed);
-            if (keys['ArrowDown']) updatePointerTarget(p1, p1.targetX, p1.targetY + speed);
-            if (keys['ArrowLeft']) updatePointerTarget(p1, p1.targetX - speed, p1.targetY);
-            if (keys['ArrowRight']) updatePointerTarget(p1, p1.targetX + speed, p1.targetY);
-        }
+// Master Build Function
+function build() {
+    currentFragment = document.createDocumentFragment();
+    labels = [];
+    
+    const wh = [90, 24, 0][wm];
+    
+    // Base foundation
+    box(-10, -10, 455, 455, 6, '#0d1420', {glow: AC});
+    pad(6, 6, 423, 423, '#161a20 linear-gradient(rgba(0,229,255,.07) 1px,transparent 1px) 0 0/21px 21px');
+    
+    const g = 'linear-gradient(135deg,#0a5a47,#053f33)';
+    const br = 'linear-gradient(135deg,#7a440a,#5a3007)';
+    [[6, 6, 165, 175, g], [256, 6, 173, 175, g], [177, 6, 73, 62, br], [177, 74, 73, 107, br], [6, 316, 176, 113, br], [293, 271, 136, 158, g]].forEach(r => {
+        pad(...r); 
+        currentFragment.lastChild.style.transform = 'translateZ(8px)';
+    });
+    
+    // Walls
+    if(wh > 0) {
+        [[0,0,435,6],[0,0,6,435],[429,0,6,185],[429,210,6,225],[0,429,213,6],[250,429,185,6],
+         [171,0,6,187],[0,181,102,6],[125,181,52,6],[177,181,26,6],[226,181,27,6],[250,181,17,6],[291,181,144,6],
+         [250,0,6,31],[250,51,6,136],[177,68,76,6],
+         [0,310,133,6],[155,310,33,6],[182,310,6,125],[287,265,6,43],[287,330,6,105],[290,265,145,6]]
+         .forEach(w => box(...w, wh, '#dfe9ee', {glow: AC}));
+         
+        // Windows
+        [[72,-1,29,8],[336,-1,29,8],[99,428,28,8],[349,428,28,8],[-1,100,8,28],[-1,248,8,28],[-1,363,8,28],[428,80,8,28],[428,324,8,28]]
+         .forEach(w => box(...w, 34, 'rgba(79,216,255,.7)', {glow: '#4fd8ff', z: 26}));
+         
+        // Exhaust
+        const fan = document.createElement('div');
+        fan.style.cssText = 'left:207px;top:-2px;width:14px;height:14px;border:2px solid #fff;border-radius:50%;box-shadow:0 0 10px #fff;transform:translateZ(66px) rotateX(90deg)';
+        currentFragment.appendChild(fan);
+    }
+    
+    // Doors
+    [[102,184,23,0,-90],[203,184,23,0,-90],[291,184,24,180,90],[253,31,21,90,90],[155,313,22,180,-90],[290,308,22,90,-90],[213,435,37,0,-90],[435,185,25,90,90]].forEach(d => door(...d));
+    
+    // Stairs
+    for(let i=0; i<9; i++) box(295 + i*13.1, 225, 13.1, 38, 12 + i*7, '#26384d', {glow: i % 2 ? null : AC});
+    
+    if(decor) decorate();
+    
+    // Labels
+    label('Room 1', 88, 93, 50, '#6cf0c8'); label('Room 2', 344, 93, 50, '#6cf0c8'); label('Room 3', 365, 366, 50, '#6cf0c8');
+    label('Washroom 2', 214, 36, 40, '#ffb347'); label('Washroom 1', 214, 126, 40, '#ffb347'); label('Kitchen', 94, 372, 40, '#ffb347');
+    label('Lobby', 140, 225, 30, '#fff'); label('Stairs to terrace', 355, 205, 80, '#fff'); label('Main door', 233, 458, 10, '#fff'); label('Exhaust fan', 214, -12, 70, '#fff');
+    
+    // Append in one go for fast render
+    H.innerHTML = '';
+    H.appendChild(currentFragment);
+}
 
-        // --- Physics Math (Takarane par kya hoga) ---
-        function resolveCollision(striker, puckObj) {
-            let dx = puckObj.x - striker.x;
-            let dy = puckObj.y - striker.y;
-            let distance = Math.hypot(dx, dy);
-            
-            if (distance < puckObj.r + striker.r) {
-                let angle = Math.atan2(dy, dx);
-                
-                let overlap = (puckObj.r + striker.r) - distance;
-                puckObj.x += Math.cos(angle) * overlap;
-                puckObj.y += Math.sin(angle) * overlap;
+let lastTime = performance.now();
 
-                let hitForce = 1.25;
-                puckObj.vx += (striker.vx * 0.9) + Math.cos(angle) * hitForce;
-                puckObj.vy += (striker.vy * 0.9) + Math.sin(angle) * hitForce;
-                
-                // Takarane par chingariyan (sparks) banayein
-                createSparks(puckObj.x - Math.cos(angle)*puckObj.r, puckObj.y - Math.sin(angle)*puckObj.r, striker.color);
-                
-                let speed = Math.hypot(puckObj.vx, puckObj.vy);
-                const maxSpeed = 30;
-                if(speed > maxSpeed) {
-                    puckObj.vx = (puckObj.vx / speed) * maxSpeed;
-                    puckObj.vy = (puckObj.vy / speed) * maxSpeed;
-                }
-            }
-        }
+// Updates the exact CSS styles
+function updateTransforms() {
+    S.style.transform = `scale(${zoom}) rotateX(${rx}deg) rotateZ(${rz}deg)`;
+    for(let i=0; i<labels.length; i++){
+        labels[i].style.transform = `translateZ(${labels[i].dataset.z}px) rotateZ(${-rz}deg) rotateX(${-rx}deg) translate(-50%,-50%)`;
+    }
+}
 
-        function checkPuckBoundaries() {
-            // Left aur Right deewarein
-            if (puck.x - puck.r < 0) { 
-                puck.x = puck.r; puck.vx *= -0.8; 
-                createSparks(puck.x, puck.y, puck.color); 
-            }
-            if (puck.x + puck.r > canvas.width) { 
-                puck.x = canvas.width - puck.r; puck.vx *= -0.8; 
-                createSparks(puck.x, puck.y, puck.color); 
-            }
-            
-            const isGoal = puck.x > (canvas.width/2 - goalWidth/2) && puck.x < (canvas.width/2 + goalWidth/2);
-            
-            // Top Goal / Deewar
-            if (puck.y - puck.r < 0) {
-                if (isGoal) {
-                    p1.score++; p1ScoreTxt.innerText = p1.score;
-                    createSparks(puck.x, puck.y, '#00d4ff');
-                    if(p1.score >= 7) gameOver(1); else resetPuck(1);
-                } else {
-                    puck.y = puck.r; puck.vy *= -0.8; 
-                    createSparks(puck.x, puck.y, puck.color);
-                }
-            }
-            
-            // Bottom Goal / Deewar
-            if (puck.y + puck.r > canvas.height) {
-                if (isGoal) {
-                    p2.score++; p2ScoreTxt.innerText = p2.score;
-                    createSparks(puck.x, puck.y, '#ff0055');
-                    if(p2.score >= 7) gameOver(2); else resetPuck(2);
-                } else {
-                    puck.y = canvas.height - puck.r; puck.vy *= -0.8;
-                    createSparks(puck.x, puck.y, puck.color);
-                }
-            }
-        }
+// 120 FPS Loop Engine with Lerp (Linear Interpolation)
+function loop(now) {
+    const dt = now - lastTime;
+    lastTime = now;
+    
+    // Speed factor to normalize rotation speed regardless of frame rate (60Hz vs 120Hz)
+    const speedFactor = dt / 16.666; // 1 at 60fps, 0.5 at 120fps
+    
+    if (auto) {
+        targetRz += 0.15 * speedFactor; // Constant spin speed
+    }
+    
+    // Smooth Lerp physics for incredibly fluid dragging and zooming
+    // Difference between target and current multiplied by easing factor
+    rx += (targetRx - rx) * 0.12 * speedFactor;
+    rz += (targetRz - rz) * 0.12 * speedFactor;
+    zoom += (targetZoom - zoom) * 0.15 * speedFactor;
 
-        function update() {
-            timeCount += 0.05;
+    // Only update DOM if things have actually changed (threshold check prevents micro-jitter)
+    if(Math.abs(targetRx - rx) > 0.01 || Math.abs(targetRz - rz) > 0.01 || Math.abs(targetZoom - zoom) > 0.001 || auto) {
+        updateTransforms();
+    }
+    
+    requestAnimationFrame(loop);
+}
 
-            // Puck ke liye ek dynamic color set karein jo time ke sath badalta hai
-            puck.color = `hsl(${(timeCount * 60) % 360}, 100%, 65%)`;
-            
-            applyKeyboardInput();
+let drag = null, pts = {}, pd = 0;
 
-            p1.vx = (p1.targetX - p1.x) * 0.35;
-            p1.vy = (p1.targetY - p1.y) * 0.35;
-            p1.x += p1.vx; p1.y += p1.vy;
-            
-            p2.vx = (p2.targetX - p2.x) * 0.35;
-            p2.vy = (p2.targetY - p2.y) * 0.35;
-            p2.x += p2.vx; p2.y += p2.vy;
+V.addEventListener('pointerdown', e => {
+    V.setPointerCapture(e.pointerId);
+    pts[e.pointerId] = e;
+    drag = { x: e.clientX, y: e.clientY };
+    auto = false;
+    document.getElementById('bAuto').classList.remove('btn-on');
+});
 
-            puck.x += puck.vx;
-            puck.y += puck.vy;
-            puck.vx *= friction;
-            puck.vy *= friction;
-            
-            puck.trail.push({x: puck.x, y: puck.y});
-            if(puck.trail.length > 20) puck.trail.shift();
+V.addEventListener('pointermove', e => {
+    pts[e.pointerId] = e;
+    const k = Object.values(pts);
+    
+    // Pinch to Zoom (Multi-touch)
+    if (k.length === 2) {
+        const d = Math.hypot(k[0].clientX - k[1].clientX, k[0].clientY - k[1].clientY);
+        if (pd) targetZoom = Math.min(3.5, Math.max(0.2, targetZoom * (d / pd)));
+        pd = d;
+        return;
+    }
+    
+    // Drag to Rotate
+    if (!drag || !pts[e.pointerId]) return;
+    
+    // Apply delta to targets (Lerp loop handles the rest)
+    targetRz += (e.clientX - drag.x) * 0.4;
+    targetRx = Math.min(90, Math.max(0, targetRx - (e.clientY - drag.y) * 0.3));
+    
+    drag = { x: e.clientX, y: e.clientY };
+});
 
-            checkPuckBoundaries();
+const up = e => { delete pts[e.pointerId]; pd = 0; drag = null; };
+V.addEventListener('pointerup', up);
+V.addEventListener('pointercancel', up);
 
-            resolveCollision(p1, puck);
-            resolveCollision(p2, puck);
-            
-            if (gameActive) checkPuckBoundaries();
-            
-            updateSparks();
-        }
+// Mouse Wheel Zoom
+V.addEventListener('wheel', e => {
+    e.preventDefault();
+    targetZoom = Math.min(3.5, Math.max(0.2, targetZoom * (e.deltaY > 0 ? 0.85 : 1.15)));
+}, { passive: false });
 
-        // --- Rendering (Graphics Draw Karna) ---
-        function drawGlowingCircle(x, y, r, color, isStriker) {
-            ctx.beginPath();
-            ctx.arc(x, y, r, 0, Math.PI * 2);
-            
-            // Andar ka hissa (Core)
-            ctx.fillStyle = isStriker ? 'rgba(255, 255, 255, 0.1)' : 'rgba(255, 255, 255, 0.8)';
-            ctx.fill();
-            
-            // Chamakta hua border (Glowing border)
-            ctx.lineWidth = isStriker ? 4 : 2;
-            ctx.strokeStyle = color;
-            ctx.shadowBlur = isStriker ? 20 : (15 + Math.sin(timeCount * 10) * 10);
-            ctx.shadowColor = color;
-            ctx.stroke();
-            ctx.shadowBlur = 0; 
-            
-            if (isStriker) {
-                ctx.beginPath();
-                ctx.arc(x, y, r * 0.4, 0, Math.PI * 2);
-                ctx.fillStyle = color;
-                ctx.fill();
-            } else {
-                // Puck (ball) ka dynamic andruni hissa
-                ctx.beginPath();
-                ctx.arc(x, y, r * 0.5, 0, Math.PI * 2);
-                ctx.fillStyle = color;
-                // Opacity jo pulse karti hai
-                ctx.globalAlpha = 0.6 + Math.sin(timeCount * 15) * 0.4;
-                ctx.fill();
-                ctx.globalAlpha = 1.0;
-            }
-        }
+// Button Logic
+document.getElementById('bWall').onclick = function() {
+    wm = (wm + 1) % 3;
+    this.textContent = 'Walls: ' + ['Full', 'Low', 'Off'][wm];
+    build();
+};
+document.getElementById('bLbl').onclick = function() {
+    showLbl = !showLbl;
+    this.classList.toggle('btn-on', showLbl);
+    labels.forEach(l => l.style.display = showLbl ? 'block' : 'none');
+};
+document.getElementById('bAuto').onclick = function() {
+    auto = !auto;
+    this.classList.toggle('btn-on', auto);
+};
+document.getElementById('bDec').onclick = function() {
+    decor = !decor;
+    this.classList.toggle('btn-on', decor);
+    build();
+};
 
-        function draw() {
-            // Background color canvas par seedha banayein
-            const bgGrad = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
-            bgGrad.addColorStop(0, '#1a1f2b');
-            bgGrad.addColorStop(1, '#0f131a');
-            ctx.fillStyle = bgGrad;
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
+const stopAuto = () => { auto = false; document.getElementById('bAuto').classList.remove('btn-on'); };
 
-            // Synthwave jaisa Grid Background banayein
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.03)';
-            ctx.lineWidth = 1;
-            const gridSize = 40;
-            let offset = (timeCount * 10) % gridSize;
-            
-            for(let i = -gridSize; i < canvas.width + gridSize; i += gridSize) {
-                ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, canvas.height); ctx.stroke();
-            }
-            for(let i = -gridSize; i < canvas.height + gridSize; i += gridSize) {
-                ctx.beginPath(); ctx.moveTo(0, i + offset); ctx.lineTo(canvas.width, i + offset); ctx.stroke();
-            }
+document.getElementById('bTop').onclick = () => { stopAuto(); targetRx = 90; targetRz = 0; };
+document.getElementById('bIso').onclick = () => { stopAuto(); targetRx = 56; targetRz = -35; };
 
-            // Ground ki lines banayein
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
-            ctx.lineWidth = 3;
-            
-            ctx.beginPath();
-            ctx.moveTo(0, canvas.height/2);
-            ctx.lineTo(canvas.width, canvas.height/2);
-            ctx.stroke();
-            
-            ctx.beginPath();
-            ctx.arc(canvas.width/2, canvas.height/2, 50, 0, Math.PI*2);
-            ctx.stroke();
+// Responsive Fitting
+function fit() {
+    // Calculates ideal zoom scale based on screen width/height to ensure the whole 3D model fits comfortably
+    const newZoom = Math.max(0.3, Math.min(window.innerWidth / 760, window.innerHeight / 720));
+    targetZoom = newZoom;
+    
+    // Force immediate sync for resize so it doesn't float sluggishly
+    zoom = targetZoom; 
+    updateTransforms();
+}
 
-            // Goal lines (Red/Blue chamakne wali)
-            ctx.lineWidth = 6;
-            ctx.shadowBlur = 10;
-            
-            ctx.shadowColor = '#ff0055';
-            ctx.strokeStyle = '#ff0055';
-            ctx.beginPath();
-            ctx.moveTo(canvas.width/2 - goalWidth/2, 3);
-            ctx.lineTo(canvas.width/2 + goalWidth/2, 3);
-            ctx.stroke();
-            
-            ctx.shadowColor = '#00d4ff';
-            ctx.strokeStyle = '#00d4ff';
-            ctx.beginPath(); 
-            ctx.moveTo(canvas.width/2 - goalWidth/2, canvas.height-3);
-            ctx.lineTo(canvas.width/2 + goalWidth/2, canvas.height-3);
-            ctx.stroke();
-            
-            ctx.shadowBlur = 0; 
-
-            // Puck ki pooch (Trail) draw karein
-            ctx.globalCompositeOperation = 'lighter';
-            if(puck.trail.length > 1) {
-                ctx.beginPath();
-                ctx.moveTo(puck.trail[0].x, puck.trail[0].y);
-                for(let i=1; i<puck.trail.length; i++) {
-                    ctx.lineTo(puck.trail[i].x, puck.trail[i].y);
-                }
-                // Bahar ki chamak
-                ctx.globalAlpha = 0.4;
-                ctx.strokeStyle = puck.color;
-                ctx.lineWidth = puck.r * 1.5;
-                ctx.lineCap = 'round';
-                ctx.lineJoin = 'round';
-                ctx.stroke();
-                
-                // Andar ki neon chamak
-                ctx.globalAlpha = 1.0;
-                ctx.strokeStyle = puck.color;
-                ctx.lineWidth = puck.r * 0.5;
-                ctx.stroke();
-            }
-            
-            // Chingariyan (Sparks) draw karein
-            for(let i=0; i<sparks.length; i++) {
-                let s = sparks[i];
-                ctx.fillStyle = s.color;
-                ctx.globalAlpha = s.life;
-                ctx.beginPath();
-                ctx.arc(s.x, s.y, s.size, 0, Math.PI*2);
-                ctx.fill();
-            }
-            ctx.globalAlpha = 1.0;
-            ctx.globalCompositeOperation = 'source-over';
-
-            // Players draw karein
-            drawGlowingCircle(p1.x, p1.y, p1.r, p1.color, true);
-            drawGlowingCircle(p2.x, p2.y, p2.r, p2.color, true);
-            
-            // Puck draw karein jo size me pulse (chhota-bada) ho rahi hai
-            const dynamicRadius = puck.r + Math.sin(timeCount * 12) * 1.5;
-            drawGlowingCircle(puck.x, puck.y, dynamicRadius, puck.color, false);
-        }
-
-        function loop() {
-            if (!gameActive) return;
-            update();
-            draw();
-            animationId = requestAnimationFrame(loop);
-        }
-
-        // ==========================================
-        // FIXED MULTI-TOUCH / POINTER INPUT ENGINE
-        // ==========================================
-
-        function getPointerPos(e) {
-            const rect = canvas.getBoundingClientRect();
-            const scaleX = canvas.width / rect.width;
-            const scaleY = canvas.height / rect.height;
-            return {
-                x: (e.clientX - rect.left) * scaleX,
-                y: (e.clientY - rect.top) * scaleY
-            };
-        }
-
-        function updatePointerTarget(playerObj, posX, posY) {
-            playerObj.targetX = Math.max(playerObj.r, Math.min(posX, canvas.width - playerObj.r));
-            playerObj.targetY = Math.max(playerObj.bounds.top + playerObj.r, Math.min(posY, playerObj.bounds.bottom - playerObj.r));
-        }
-
-        canvas.addEventListener('pointerdown', (e) => {
-            if (!gameActive) return;
-            e.preventDefault(); 
-            try { canvas.setPointerCapture(e.pointerId); } catch(err) {} 
-            
-            const pos = getPointerPos(e);
-            
-            if (pos.y > canvas.height / 2 && p1PointerId === null) {
-                p1PointerId = e.pointerId;
-                updatePointerTarget(p1, pos.x, pos.y);
-            } else if (pos.y <= canvas.height / 2 && p2PointerId === null) {
-                p2PointerId = e.pointerId;
-                updatePointerTarget(p2, pos.x, pos.y);
-            }
-        });
-
-        canvas.addEventListener('pointermove', (e) => {
-            if (!gameActive) return;
-            e.preventDefault();
-            const pos = getPointerPos(e);
-            
-            if (e.pointerId === p1PointerId) updatePointerTarget(p1, pos.x, pos.y);
-            if (e.pointerId === p2PointerId) updatePointerTarget(p2, pos.x, pos.y);
-        });
-
-        const releasePointer = (e) => {
-            if (e.pointerId === p1PointerId) p1PointerId = null;
-            if (e.pointerId === p2PointerId) p2PointerId = null;
-        };
-
-        canvas.addEventListener('pointerup', releasePointer);
-        canvas.addEventListener('pointercancel', releasePointer);
-        canvas.addEventListener('pointerout', releasePointer);
-
-
-        // --- UI Interactions ---
-        startBtn.addEventListener('click', () => {
-            if (startBtn.innerText === "Khel Jari Rakhein (Resume)") {
-                gameActive = true;
-                uiOverlay.classList.add('hidden');
-                pauseBtn.classList.add('visible');
-                cancelAnimationFrame(animationId);
-                loop();
-            } else {
-                startGame();
-            }
-        });
-        
-        pauseBtn.addEventListener('click', pauseGame);
-
-        draw();
-
-    </script>
+// Initial Kick-off
+window.addEventListener('resize', fit);
+build();
+fit();
+requestAnimationFrame(loop); // Start the 120 FPS Loop
+</script>
 </body>
 </html>
